@@ -18,12 +18,13 @@ credential store local do container (`~/.config/monid`), que é apagado quando a
    ```
    npx monid keys add --key <sua-chave-monid_live_...> --label site-escritorio
    ```
-4. Verificar conectividade e saldo:
+4. Verificar conectividade e saldo — **sempre com `NODE_USE_ENV_PROXY=1`** (ver seção
+   abaixo sobre por quê):
    ```
-   npx monid whoami
-   npx monid balance
+   NODE_USE_ENV_PROXY=1 npx monid whoami
+   NODE_USE_ENV_PROXY=1 npx monid balance
    ```
-   Se ambos responderem sem erro de rede/allowlist, a integração está funcionando.
+   Se ambos responderem sem erro, a integração está funcionando.
 5. (Opcional) Servidor MCP, se for usar via MCP em vez da CLI direta:
    ```
    claude mcp add --transport http monid https://mcp.monid.ai/v1 \
@@ -33,8 +34,18 @@ credential store local do container (`~/.config/monid`), que é apagado quando a
    Isso também não persiste entre sessões (fica em `~/.claude.json`, fora do repo).
 
 ## Contexto do bloqueio original
-As tentativas de alcançar `monid.ai`, `api.monid.ai`, `mcp.monid.ai` e `docs.monid.ai`
-falhavam com `403` do proxy de rede porque o ambiente "Default" estava com Acesso à rede
-em "Trusted" (allowlist padrão, sem esses domínios). Foi alterado manualmente para
-"Completo" (Full) nas configurações do ambiente, no app do Claude Code — essa mudança só
-vale para sessões abertas depois da alteração.
+Duas causas distintas, resolvidas em sequência:
+
+1. **Política de rede do ambiente.** As tentativas de alcançar `monid.ai`, `api.monid.ai`,
+   `mcp.monid.ai` e `docs.monid.ai` falhavam com `403` do proxy porque o ambiente
+   "Default" estava com Acesso à rede em "Trusted" (allowlist padrão, sem esses domínios).
+   Foi alterado manualmente para "Completo" (Full) nas configurações do ambiente, no app
+   do Claude Code — essa mudança só vale para sessões abertas depois da alteração.
+2. **`fetch` nativo do Node não usa `HTTPS_PROXY`.** Mesmo com a rede liberada, `npx monid
+   whoami`/`balance` continuavam falhando com `"Host not in allowlist"` — mas um `curl`
+   direto para os mesmos endpoints funcionava. Causa: a CLI da Monid usa o `fetch` global
+   do Node, que por padrão ignora a variável `HTTPS_PROXY` deste ambiente e tenta sair
+   direto para a internet, caindo numa camada de bloqueio diferente. A correção
+   (documentada em `/root/.ccr/README.md`, seção "Tool ignores the proxy entirely") é
+   rodar com `NODE_USE_ENV_PROXY=1` (requer Node ≥ 22.21; este ambiente tem 22.22.2).
+   Com isso, `whoami` e `balance` responderam normalmente.
